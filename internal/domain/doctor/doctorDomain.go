@@ -2,7 +2,6 @@ package doctor
 
 import (
 	"errors"
-	"wimed/internal/infra/http/restError"
 )
 
 type DoctorDomain struct {
@@ -55,7 +54,7 @@ func NewDomainDoctor(id string, name string, crm string, email string, status bo
 }
 
 type DoctorDomainInterface interface {
-	Activate() *restError.RestErr
-	Deactivate() *restError.RestErr
+	Activate() 		error
+	Deactivate()	error
 	SetID(id string)
 }
