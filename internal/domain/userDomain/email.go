@@ -1,7 +1,6 @@
 package userDomain
 
 import (
-	"errors"
 	"strings"
 )
 
@@ -12,7 +11,7 @@ type Email struct {
 func NewEmail(raw string) (Email, error) {
 	v := strings.TrimSpace(strings.ToLower(raw))
 	if v == "" || !looksLikeEmail(v) {
-		return Email{}, errors.New("invalid email")
+		return Email{}, ErrInvalidEmail
 	}
 	return Email{value: v}, nil
 }

@@ -43,7 +43,7 @@ func (uc *BookAppointment) Execute(ctx context.Context, in dto.BookAppointmentIn
 	if in.PriceCents < 0 {
 		return nil, errors.New("price-cents must be positive")
 	}
-
+	
 	now := time.Now()
 	if uc.Now != nil {
 		now = uc.Now()
