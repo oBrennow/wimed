@@ -102,13 +102,13 @@ func (s *SlotDomain) MarkAvailable(now time.Time) error {
 }
 
 func (s *SlotDomain) Block(now time.Time) error {
-	if s.status == SlotBlocked {
+	if s.status == SlotBooked {
 		return errors.New("cannot block a booked slot")
 	}
+
 	s.status = SlotBlocked
 	s.touch(now)
 	return nil
-
 }
 
 func (s *SlotDomain) touch(now time.Time) {

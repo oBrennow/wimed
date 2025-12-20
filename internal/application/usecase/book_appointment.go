@@ -37,8 +37,8 @@ func (uc *BookAppointment) Execute(ctx context.Context, in dto.BookAppointmentIn
 	if strings.TrimSpace(in.DoctorID) == "" {
 		return nil, errors.New("doctor_id is required")
 	}
-	if strings.TrimSpace(in.PatientID) == "" {
-		return nil, errors.New("patient_id is required")
+	if strings.TrimSpace(in.PaymentID) == "" {
+		return nil, errors.New("payment_id is required")
 	}
 	if in.PriceCents < 0 {
 		return nil, errors.New("price-cents must be positive")
@@ -88,8 +88,8 @@ func (uc *BookAppointment) Execute(ctx context.Context, in dto.BookAppointmentIn
 
 	a, err := appointmentDomain.NewCreateAppointmentDomain(
 		in.AppointmentID,
+		in.PatientID,
 		in.DoctorID,
-		in.PaymentID,
 		in.SlotID,
 		in.PriceCents,
 		appointmentDomain.StatusScheduled,

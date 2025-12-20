@@ -93,7 +93,7 @@ func (p *PaymentDomain) CreatedAt() time.Time  { return p.createdAt }
 func (p *PaymentDomain) UpdatedAt() time.Time  { return p.updatedAt }
 
 func (p *PaymentDomain) Approve(now time.Time) error {
-	if p.status != StatusApproved {
+	if p.status != StatusPending {
 		return errors.New("payment is not pending")
 	}
 	p.status = StatusApproved
@@ -115,4 +115,5 @@ func (p *PaymentDomain) touch(now time.Time) {
 	if now.IsZero() {
 		now = time.Now()
 	}
+	p.updatedAt = now
 }

@@ -115,7 +115,7 @@ func (a *AppointmentDomain) Cancel(now time.Time) error {
 
 func (a *AppointmentDomain) Complete(now time.Time) error {
 	if a.status != StatusScheduled {
-		return errors.New("only paid appointment can be completed")
+		return errors.New("only scheduled appointment can be completed")
 	}
 	a.status = StatusCompleted
 	a.touch(now)
