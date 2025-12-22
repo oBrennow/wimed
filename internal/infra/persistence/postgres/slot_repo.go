@@ -11,11 +11,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type slotRepository struct {
+type SlotRepository struct {
 	Pool *pgxpool.Pool
 }
 
-func (r slotRepository) GetByIDForUpdate(ctx context.Context, tx ports.Tx, id string) (*availabilityDomain.SlotDomain, error) {
+func (r SlotRepository) GetByIDForUpdate(ctx context.Context, tx ports.Tx, id string) (*availabilityDomain.SlotDomain, error) {
 	pgxTx, ok := unwrapTx(tx)
 	if !ok {
 		return nil, errors.New("invalid tx type")
@@ -59,10 +59,25 @@ func (r slotRepository) GetByIDForUpdate(ctx context.Context, tx ports.Tx, id st
 	return slot, nil
 }
 
-func unwrapTx(tx ports.Tx) (pgx.Tx, bool) {
-	w, ok := tx.(txWrap)
+func (r SlotRepository) Update(ctx context.Context, tx ports.Tx, s *availabilityDomain.SlotDomain) error {
+	pgxTx, ok := unwrapTx(tx)
 	if !ok {
-		return nil, false
+		return errors.New("invalid tx type")
 	}
-	return w.tx, true
+
+		const q = `
+UPDATE availability_slots
+SET status = $2,
+    updated_at = $3
+WHERE id = $1
+`
+
+	ct, err := pgxTx.Exec(ctx, q, s.ID(), string(s.Status()), s.UpdatedAt())
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return errors.New("slot not fund")
+	}
+	return nil
 }

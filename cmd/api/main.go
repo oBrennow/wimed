@@ -12,9 +12,16 @@ import (
 
 
 func main() { 
-	err := godotenv.Load(".env")
-	if err != nil {
-		log.Println("could not load .env:", err)
+	
+	env := os.Getenv("ENV")
+	if env == ""{
+		env = "dev"
+	}
+
+	if env != "production" {
+		if err := godotenv.Load(); err != nil {
+			log.Printf("warning: .env not loaded: %v", err)
+		}
 	}
 
 	dbURL := os.Getenv("DATABASE_URL")

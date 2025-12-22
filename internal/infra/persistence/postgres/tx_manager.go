@@ -33,5 +33,5 @@ func unwrapTx(tx ports.Tx) (pgx.Tx, bool) {
 	if !ok {
 		return nil, false
 	}
-	return w.tx. true
+	return w.tx, true
 }

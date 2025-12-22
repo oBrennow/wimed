@@ -30,7 +30,7 @@ type BookAppointment struct {
 	TxManager ports.TxManager
 
 	Patients     ports.PatientRepository
-	Slots        ports.SlotRepository
+	Slots        ports.SlotLockRepository
 	Appointments ports.AppointmentRepository
 	Payments     ports.PaymentRepository
 

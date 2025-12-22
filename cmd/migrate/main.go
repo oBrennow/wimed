@@ -6,9 +6,16 @@ import (
 	"os"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	if err := godotenv.Load(".env"); err != nil {
+		log.Printf("could not load .env: %v", err)
+	} else {
+		log.Printf(".env loaded")
+	}
+
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
 		log.Fatal("DATABASE_URL is required")
