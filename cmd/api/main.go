@@ -57,13 +57,22 @@ func main() {
 
 	appointmentHandler := handlers.NewAppointmentHandler(bookUC)
 
+	txManager := postgres.TxManager{Pool: pool}
+	now := func() time.Time {return time.Now().UTC()}
+
 	listSlotsUC := &usecase.ListAvailableSlots{
 		TxManager: postgres.TxManager{Pool: pool},
 		Slots:     postgres.SlotRepository{},
 		Now:       func() time.Time { return time.Now().UTC() },
 	}
 
-	slotHandler := handlers.NewSlotHandler(listSlotsUC)
+	genSlotsUC := &usecase.GenerateSlots{
+		TxManager:	txManager,
+		Slots: 		postgres.SlotRepository{},
+		Now: 		now,
+	}
+
+	slotHandler := handlers.NewSlotHandler(listSlotsUC, genSlotsUC)
 
 
 	r := apphttp.NewRouter(appointmentHandler, slotHandler)

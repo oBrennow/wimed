@@ -12,6 +12,8 @@ func NewRouter(h *handlers.AppointmentHandler, slots *handlers.SlotHandler) *gin
 
 	r.POST("/appointments/book", h.Book)
 	r.GET("/doctors/:doctor_id/slots", slots.ListAvailableByDoctor)
+	r.POST("/doctors/:doctor_id/slots/generate", slots.Generate)
+
 
 	return r
 }
