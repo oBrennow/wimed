@@ -4,16 +4,17 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"context"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 )
 
-//TIP <p>To run your code, right-click the code and select <b>Run</b>.</p> <p>Alternatively, click
-// the <icon src="AllIcons.Actions.Execute"/> icon in the gutter and select the <b>Run</b> menu item from here.</p>
 
-func main() {
-	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found")
+func main() { 
+	err := godotenv.Load(".env")
+	if err != nil {
+		log.Println("could not load .env:", err)
 	}
 
 	dbURL := os.Getenv("DATABASE_URL")
@@ -21,5 +22,15 @@ func main() {
 		log.Fatal("DATABASE_URL is required")
 	}
 
-	fmt.Println(dbURL)
+	pool, err := pgxpool.New(context.Background(), dbURL)
+	if err != nil {
+		log.Fatalf("pgxpool.New error: %v", err)
+	}
+	defer pool.Close()
+
+	if err := pool.Ping(context.Background()); err != nil {
+		log.Fatalf("db ping error %v", err)
+	}
+
+	fmt.Println("Connected to database succesfully")
 }

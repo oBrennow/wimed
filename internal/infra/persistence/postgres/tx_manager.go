@@ -13,16 +13,25 @@ type TxManager struct {
 }
 
 type txWrap struct {
+	ctx context.Context
 	tx pgx.Tx
 }
 
-func (t txWrap) Commit() error   { return t.tx.Commit(context.Background()) }
-func (t txWrap) Rollback() error { return t.tx.Rollback(context.Background()) }
+func (t txWrap) Commit() error   { return t.tx.Commit(t.ctx) }
+func (t txWrap) Rollback() error { return t.tx.Rollback(t.ctx) }
 
 func (m TxManager) Begin(ctx context.Context) (ports.Tx, error) {
 	tx, err := m.Pool.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return txWrap{tx: tx}, nil
+	return txWrap{ctx: ctx,tx: tx}, nil
+}
+
+func unwrapTx(tx ports.Tx) (pgx.Tx, bool) {
+	w, ok := tx.(txWrap)
+	if !ok {
+		return nil, false
+	}
+	return w.tx. true
 }
