@@ -3,14 +3,27 @@ package usecase
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 	"wimed/internal/application/dto"
 	"wimed/internal/domain/appointmentDomain"
-	"wimed/internal/domain/availabilityDomain"
 	"wimed/internal/domain/paymentDomain"
 
 	"wimed/internal/application/ports"
+)
+
+var (
+	ErrBookAppointmentAppointmentIDRequired = errors.New("book_appointment: appointment_id is required")
+	ErrBookAppointmentPatientIDRequired     = errors.New("book_appointment: patient_id is required")
+	ErrBookAppointmentSlotIDRequired        = errors.New("book_appointment: slot_id is required")
+	ErrBookAppointmentDoctorIDRequired      = errors.New("book_appointment: doctor_id is required")
+	ErrBookAppointmentPaymentIDRequired     = errors.New("book_appointment: payment_id is required")
+	ErrBookAppointmentPriceInvalid          = errors.New("book_appointment: price_cents must be >= 0")
+
+	ErrBookAppointmentPatientNotFound        = errors.New("book_appointment: patient not found")
+	ErrBookAppointmentSlotDoctorMismatch     = errors.New("book_appointment: slot does not belong to doctor")
+	ErrBookAppointmentInvalidPaymentProvider = errors.New("book_appointment: invalid payment provider")
 )
 
 type BookAppointment struct {
@@ -25,60 +38,67 @@ type BookAppointment struct {
 }
 
 func (uc *BookAppointment) Execute(ctx context.Context, in dto.BookAppointmentInput) (*dto.BookAppointmentOutput, error) {
-	if strings.TrimSpace(in.AppointmentID) == "" {
-		return nil, errors.New("appointment_id is required")
+	appointmentID := strings.TrimSpace(in.AppointmentID)
+	patientID := strings.TrimSpace(in.PatientID)
+	slotID := strings.TrimSpace(in.SlotID)
+	doctorID := strings.TrimSpace(in.DoctorID)
+	paymentID := strings.TrimSpace(in.PaymentID)
+
+	if appointmentID == "" {
+		return nil, ErrBookAppointmentAppointmentIDRequired
 	}
-	if strings.TrimSpace(in.PatientID) == "" {
-		return nil, errors.New("patient_id is required")
+	if patientID == "" {
+		return nil, ErrBookAppointmentPatientIDRequired
 	}
-	if strings.TrimSpace(in.SlotID) == "" {
-		return nil, errors.New("slot_id is required")
+	if slotID == "" {
+		return nil, ErrBookAppointmentSlotIDRequired
 	}
-	if strings.TrimSpace(in.DoctorID) == "" {
-		return nil, errors.New("doctor_id is required")
+	if doctorID == "" {
+		return nil, ErrBookAppointmentDoctorIDRequired
 	}
-	if strings.TrimSpace(in.PaymentID) == "" {
-		return nil, errors.New("payment_id is required")
+	if paymentID == "" {
+		return nil, ErrBookAppointmentPaymentIDRequired
 	}
 	if in.PriceCents < 0 {
-		return nil, errors.New("price-cents must be positive")
+		return nil, ErrBookAppointmentPriceInvalid
 	}
-	
+
 	now := time.Now()
 	if uc.Now != nil {
 		now = uc.Now()
+	}
+
+	provider, err := parseProvider(in.PaymentProvider)
+	if err != nil {
+
+		return nil, fmt.Errorf("%w: %v", ErrBookAppointmentInvalidPaymentProvider, err)
 	}
 
 	tx, err := uc.TxManager.Begin(ctx)
 	if err != nil {
 		return nil, err
 	}
-
 	defer func() { _ = tx.Rollback() }()
 
-	ok, err := uc.Patients.ExistsByID(ctx, tx, in.PatientID)
+	ok, err := uc.Patients.ExistsByID(ctx, tx, patientID)
 	if err != nil {
 		return nil, err
 	}
-
 	if !ok {
-		return nil, errors.New("patient not found")
+		return nil, ErrBookAppointmentPatientNotFound
 	}
 
-	slot, err := uc.Slots.GetIDForUpate(ctx, tx, in.SlotID)
+	slot, err := uc.Slots.GetByIDForUpdate(ctx, tx, slotID)
 	if err != nil {
 		return nil, err
 	}
 
-	if slot.DoctorID() != in.DoctorID {
-		return nil, errors.New("slot does not belong to doctor")
+	if slot.DoctorID() != doctorID {
+		return nil, ErrBookAppointmentSlotDoctorMismatch
 	}
 
-	if slot.Status() != availabilityDomain.SlotAvailable {
-		return nil, errors.New("slot is not available")
-	}
-
-	if err := slot.MarkedBooked(now); err != nil {
+	if err := slot.MarkBooked(now); err != nil {
+		// domínio já devolve ErrSlotCannotBook etc.
 		return nil, err
 	}
 
@@ -86,42 +106,37 @@ func (uc *BookAppointment) Execute(ctx context.Context, in dto.BookAppointmentIn
 		return nil, err
 	}
 
-	a, err := appointmentDomain.NewCreateAppointmentDomain(
-		in.AppointmentID,
-		in.PatientID,
-		in.DoctorID,
-		in.SlotID,
+	appt, err := appointmentDomain.CreateAppointmentDomain(
+		appointmentID,
+		patientID,
+		slot.DoctorID(),
+		slotID,
 		in.PriceCents,
 		appointmentDomain.StatusScheduled,
 		now,
 	)
-
-	if err != nil {
-		return nil, err
-	}
-	if err := uc.Appointments.Create(ctx, tx, a); err != nil {
-		return nil, err
-	}
-
-	provider, err := parseProvider(in.PaymentProvider)
 	if err != nil {
 		return nil, err
 	}
 
-	p, err := paymentDomain.NewPaymentDomain(
-		in.PaymentID,
-		in.AppointmentID,
+	if err := uc.Appointments.Create(ctx, tx, appt); err != nil {
+		return nil, err
+	}
+
+	pay, err := paymentDomain.CreatePaymentDomain(
+		paymentID,
+		appointmentID,
 		provider,
 		in.PriceCents,
 		paymentDomain.StatusPending,
 		in.ExternalRef,
 		now,
 	)
-
 	if err != nil {
 		return nil, err
 	}
-	if err := uc.Payments.Create(ctx, tx, p); err != nil {
+
+	if err := uc.Payments.Create(ctx, tx, pay); err != nil {
 		return nil, err
 	}
 
@@ -130,11 +145,10 @@ func (uc *BookAppointment) Execute(ctx context.Context, in dto.BookAppointmentIn
 	}
 
 	return &dto.BookAppointmentOutput{
-		AppointmentID: a.ID(),
-		PaymentID:     p.ID(),
-		Status:        string(a.Status()),
+		AppointmentID: appt.ID(),
+		PaymentID:     pay.ID(),
+		Status:        string(appt.Status()),
 	}, nil
-
 }
 
 func parseProvider(raw string) (paymentDomain.Provider, error) {
@@ -146,6 +160,6 @@ func parseProvider(raw string) (paymentDomain.Provider, error) {
 	case "MANUAL":
 		return paymentDomain.ProviderManual, nil
 	default:
-		return "", errors.New("invalid payment provider")
+		return "", fmt.Errorf("provider=%q", raw)
 	}
 }

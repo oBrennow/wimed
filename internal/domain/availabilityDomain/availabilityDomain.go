@@ -2,10 +2,24 @@ package availabilityDomain
 
 import (
 	"errors"
+	"strings"
 	"time"
 )
 
 type SlotStatus string
+
+var (
+	ErrSlotIDRequired     = errors.New("slot: id is required")
+	ErrSlotDoctorRequired = errors.New("slot: doctor_id is required")
+	ErrSlotTimeInvalid    = errors.New("slot: time is invalid")
+	ErrSlotStatusInvalid  = errors.New("slot: status is invalid")
+
+	ErrSlotCannotBook           = errors.New("slot: can only book an available slot")
+	ErrSlotCannotBlock          = errors.New("slot: can only block an available slot")
+	ErrSlotCannotUnblock        = errors.New("slot: can only unblock a blocked slot")
+	ErrSlotCreatedAtRequired    = errors.New("slot: created_at is required")
+	ErrSlotUpdatedBeforeCreated = errors.New("slot: updated_at must be >= created_at")
+)
 
 const (
 	SlotAvailable SlotStatus = "AVAILABLE"
@@ -13,38 +27,42 @@ const (
 	SlotBlocked   SlotStatus = "BLOCKED"
 )
 
+func (st SlotStatus) IsValid() bool {
+	switch st {
+	case SlotAvailable, SlotBooked, SlotBlocked:
+		return true
+	default:
+		return false
+	}
+}
+
 type SlotDomain struct {
 	id       string
 	doctorID string
 
-	startedAT time.Time
-	endedAT   time.Time
+	startedAt time.Time
+	endedAt   time.Time
 
 	status SlotStatus
 
-	createdAT time.Time
-	updatedAT time.Time
+	createdAt time.Time
+	updatedAt time.Time
 }
 
-const (
-	errSlotIDRequired     = "slot id is required"
-	errSlotDoctorRequired = "doctor id is required"
-	errSlotTimeInvalid    = "slot start/end time is invalid"
-	errSlotStatusInvalid  = "slot status is invalid"
-)
-
-func NewCreateSlotDomain(id, doctorID string, startAt, endAt time.Time, status SlotStatus, now time.Time) (*SlotDomain, error) {
+func CreateSlotDomain(id, doctorID string, startedAt, endedAt time.Time, status SlotStatus, now time.Time) (*SlotDomain, error) {
+	id = strings.TrimSpace(id)
 	if id == "" {
-		return nil, errors.New(errSlotIDRequired)
+		return nil, ErrSlotIDRequired
 	}
+	doctorID = strings.TrimSpace(doctorID)
 	if doctorID == "" {
-		return nil, errors.New(errSlotDoctorRequired)
+		return nil, ErrSlotDoctorRequired
 	}
-	if startAt.IsZero() || endAt.IsZero() || !startAt.Before(endAt) {
-		return nil, errors.New(errSlotTimeInvalid)
+	if startedAt.IsZero() || endedAt.IsZero() || !startedAt.Before(endedAt) {
+		return nil, ErrSlotTimeInvalid
 	}
-	if status != SlotAvailable && status != SlotBooked && status != SlotBlocked {
-		return nil, errors.New(errSlotStatusInvalid)
+	if !status.IsValid() {
+		return nil, ErrSlotStatusInvalid
 	}
 	if now.IsZero() {
 		now = time.Now()
@@ -53,60 +71,81 @@ func NewCreateSlotDomain(id, doctorID string, startAt, endAt time.Time, status S
 	return &SlotDomain{
 		id:        id,
 		doctorID:  doctorID,
-		startedAT: startAt,
-		endedAT:   endAt,
+		startedAt: startedAt,
+		endedAt:   endedAt,
 		status:    status,
-		createdAT: now,
-		updatedAT: now,
+		createdAt: now,
+		updatedAt: now,
 	}, nil
 }
 
-func RebuildSlot(id, doctorID string, startAt, endAt time.Time, status SlotStatus, now time.Time) *SlotDomain {
+func RebuildSlotDomain(id, doctorID string, startedAt, endedAt time.Time, status SlotStatus, createdAt, updatedAt time.Time) (*SlotDomain, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil, ErrSlotIDRequired
+	}
+	doctorID = strings.TrimSpace(doctorID)
+	if doctorID == "" {
+		return nil, ErrSlotDoctorRequired
+	}
+	if startedAt.IsZero() || endedAt.IsZero() || !startedAt.Before(endedAt) {
+		return nil, ErrSlotTimeInvalid
+	}
+	if !status.IsValid() {
+		return nil, ErrSlotStatusInvalid
+	}
+	if createdAt.IsZero() {
+		return nil, ErrSlotCreatedAtRequired
+	}
+	if updatedAt.IsZero() {
+		updatedAt = createdAt
+	}
+	if updatedAt.Before(createdAt) {
+		return nil, ErrSlotUpdatedBeforeCreated
+	}
+
 	return &SlotDomain{
 		id:        id,
 		doctorID:  doctorID,
-		startedAT: startAt,
-		endedAT:   endAt,
+		startedAt: startedAt,
+		endedAt:   endedAt,
 		status:    status,
-		createdAT: now,
-		updatedAT: now,
-	}
+		createdAt: createdAt,
+		updatedAt: updatedAt,
+	}, nil
 }
 
 func (s *SlotDomain) ID() string           { return s.id }
 func (s *SlotDomain) DoctorID() string     { return s.doctorID }
-func (s *SlotDomain) StartedAt() time.Time { return s.startedAT }
-func (s *SlotDomain) EndedAt() time.Time   { return s.endedAT }
+func (s *SlotDomain) StartedAt() time.Time { return s.startedAt }
+func (s *SlotDomain) EndedAt() time.Time   { return s.endedAt }
 func (s *SlotDomain) Status() SlotStatus   { return s.status }
-func (s *SlotDomain) CreatedAt() time.Time { return s.createdAT }
-func (s *SlotDomain) UpdatedAt() time.Time { return s.updatedAT }
+func (s *SlotDomain) CreatedAt() time.Time { return s.createdAt }
+func (s *SlotDomain) UpdatedAt() time.Time { return s.updatedAt }
 
-func (s *SlotDomain) MarkedBooked(now time.Time) error {
+func (s *SlotDomain) MarkBooked(now time.Time) error {
 	if s.status != SlotAvailable {
-		return errors.New("slot is not available")
+		return ErrSlotCannotBook
 	}
 	s.status = SlotBooked
 	s.touch(now)
 	return nil
-
-}
-
-func (s *SlotDomain) MarkAvailable(now time.Time) error {
-	if s.status == SlotBooked {
-		return errors.New("cannot revert booked slot to available directly")
-	}
-	s.status = SlotAvailable
-	s.touch(now)
-	return nil
-
 }
 
 func (s *SlotDomain) Block(now time.Time) error {
-	if s.status == SlotBooked {
-		return errors.New("cannot block a booked slot")
+	if s.status != SlotAvailable {
+		return ErrSlotCannotBlock
 	}
-
 	s.status = SlotBlocked
+	s.touch(now)
+	return nil
+}
+
+func (s *SlotDomain) Unblock(now time.Time) error {
+	if s.status != SlotBlocked {
+		return ErrSlotCannotUnblock
+	}
+	s.status = SlotAvailable
 	s.touch(now)
 	return nil
 }
@@ -115,5 +154,5 @@ func (s *SlotDomain) touch(now time.Time) {
 	if now.IsZero() {
 		now = time.Now()
 	}
-	s.updatedAT = now
+	s.updatedAt = now
 }

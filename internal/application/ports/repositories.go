@@ -16,7 +16,7 @@ type PatientRepository interface {
 }
 
 type SlotRepository interface {
-	GetIDForUpate(ctx context.Context, tx Tx, id string) (*availabilityDomain.SlotDomain, error)
+	GetByIDForUpdate(ctx context.Context, tx Tx, id string) (*availabilityDomain.SlotDomain, error)
 	Update(ctx context.Context, tx Tx, s *availabilityDomain.SlotDomain) error
 
 	ListAvailableByDoctor(ctx context.Context, tx Tx, doctorID string, from, to time.Time, limit int) ([]availabilityDomain.SlotDomain, error)

@@ -2,10 +2,26 @@ package appointmentDomain
 
 import (
 	"errors"
+	"strings"
 	"time"
 )
 
 type Status string
+
+var (
+	ErrApptIDRequired      = errors.New("appointment: id is required")
+	ErrApptDoctorRequired  = errors.New("appointment: doctor is required")
+	ErrApptPatientRequired = errors.New("appointment: patient id is required")
+	ErrApptSlotRequired    = errors.New("appointment: slot id is required")
+	ErrApptPriceInvalid    = errors.New("appointment: price cents must be >= 0")
+	ErrApptStatusInvalid   = errors.New("appointment: status is invalid")
+
+	ErrOnlyPaidCanComplete      = errors.New("appointment: only paid can complete")
+	ErrApptCreatedAtRequired    = errors.New("appointment: created_at is required")
+	ErrApptUpdatedBeforeCreated = errors.New("appointment: updated_at must be >= created_at")
+	ErrApptNotScheduled         = errors.New("appointment: must be scheduled")
+	ErrApptCannotCancel         = errors.New("appointment: cannot cancel in current status")
+)
 
 const (
 	StatusScheduled Status = "SCHEDULED"
@@ -13,6 +29,15 @@ const (
 	StatusCanceled  Status = "CANCELED"
 	StatusCompleted Status = "COMPLETED"
 )
+
+func (st Status) IsValid() bool {
+	switch st {
+	case StatusScheduled, StatusPaid, StatusCanceled, StatusCompleted:
+		return true
+	default:
+		return false
+	}
+}
 
 type AppointmentDomain struct {
 	id        string
@@ -28,35 +53,30 @@ type AppointmentDomain struct {
 	updatedAt time.Time
 }
 
-const (
-	errApptIDRequired      = "appointment id is required"
-	errApptDoctorRequired  = "doctor id is required"
-	errApptPatientRequired = "patient id is required"
-	errApptSlotRequired    = "slot id is required"
-	errApptPriceInvalid    = "price cents must be >= 0"
-	errApptStatusInvalid   = "appointment status is invalid"
-)
+func CreateAppointmentDomain(id, patientID, doctorID, slotID string, priceCents int64, status Status, now time.Time) (*AppointmentDomain, error) {
+	id = strings.TrimSpace(id)
+	patientID = strings.TrimSpace(patientID)
+	doctorID = strings.TrimSpace(doctorID)
+	slotID = strings.TrimSpace(slotID)
 
-func NewCreateAppointmentDomain(id, patientID, doctorID, slotID string, priceCents int64, status Status, now time.Time) (*AppointmentDomain, error) {
 	if id == "" {
-		return nil, errors.New(errApptIDRequired)
+		return nil, ErrApptIDRequired
 	}
 	if doctorID == "" {
-		return nil, errors.New(errApptDoctorRequired)
+		return nil, ErrApptDoctorRequired
 	}
 	if patientID == "" {
-		return nil, errors.New(errApptPatientRequired)
+		return nil, ErrApptPatientRequired
 	}
 	if slotID == "" {
-		return nil, errors.New(errApptSlotRequired)
+		return nil, ErrApptSlotRequired
 	}
 	if priceCents < 0 {
-		return nil, errors.New(errApptPriceInvalid)
+		return nil, ErrApptPriceInvalid
 	}
-	if status != StatusScheduled && status != StatusPaid && status != StatusCanceled && status != StatusCompleted {
-		return nil, errors.New(errApptStatusInvalid)
+	if !status.IsValid() {
+		return nil, ErrApptStatusInvalid
 	}
-
 	if now.IsZero() {
 		now = time.Now()
 	}
@@ -73,7 +93,39 @@ func NewCreateAppointmentDomain(id, patientID, doctorID, slotID string, priceCen
 	}, nil
 }
 
-func RebuildAppointment(id, patientID, doctorID, slotID string, priceCents int64, status Status, now time.Time) *AppointmentDomain {
+func RebuildAppointmentDomain(id, patientID, doctorID, slotID string, priceCents int64, status Status, createdAt, updatedAt time.Time) (*AppointmentDomain, error) {
+	id = strings.TrimSpace(id)
+	patientID = strings.TrimSpace(patientID)
+	doctorID = strings.TrimSpace(doctorID)
+	slotID = strings.TrimSpace(slotID)
+
+	if id == "" {
+		return nil, ErrApptIDRequired
+	}
+	if doctorID == "" {
+		return nil, ErrApptDoctorRequired
+	}
+	if patientID == "" {
+		return nil, ErrApptPatientRequired
+	}
+	if slotID == "" {
+		return nil, ErrApptSlotRequired
+	}
+	if priceCents < 0 {
+		return nil, ErrApptPriceInvalid
+	}
+	if !status.IsValid() {
+		return nil, ErrApptStatusInvalid
+	}
+	if createdAt.IsZero() {
+		return nil, ErrApptCreatedAtRequired
+	}
+	if updatedAt.IsZero() {
+		updatedAt = createdAt
+	}
+	if updatedAt.Before(createdAt) {
+		return nil, ErrApptUpdatedBeforeCreated
+	}
 	return &AppointmentDomain{
 		id:         id,
 		doctorID:   doctorID,
@@ -81,9 +133,9 @@ func RebuildAppointment(id, patientID, doctorID, slotID string, priceCents int64
 		slotID:     slotID,
 		priceCents: priceCents,
 		status:     status,
-		createdAt:  now,
-		updatedAt:  now,
-	}
+		createdAt:  createdAt,
+		updatedAt:  updatedAt,
+	}, nil
 }
 
 func (a *AppointmentDomain) ID() string           { return a.id }
@@ -97,7 +149,7 @@ func (a *AppointmentDomain) UpdatedAt() time.Time { return a.updatedAt }
 
 func (a *AppointmentDomain) MarkPaid(now time.Time) error {
 	if a.status != StatusScheduled {
-		return errors.New("appointment is not scheduled status")
+		return ErrApptNotScheduled
 	}
 	a.status = StatusPaid
 	a.touch(now)
@@ -106,7 +158,7 @@ func (a *AppointmentDomain) MarkPaid(now time.Time) error {
 
 func (a *AppointmentDomain) Cancel(now time.Time) error {
 	if a.status == StatusCanceled || a.status == StatusCompleted {
-		return errors.New("appointment cannot be canceled in current status")
+		return ErrApptCannotCancel
 	}
 	a.status = StatusCanceled
 	a.touch(now)
@@ -114,8 +166,8 @@ func (a *AppointmentDomain) Cancel(now time.Time) error {
 }
 
 func (a *AppointmentDomain) Complete(now time.Time) error {
-	if a.status != StatusScheduled {
-		return errors.New("only scheduled appointment can be completed")
+	if a.status != StatusPaid {
+		return ErrOnlyPaidCanComplete
 	}
 	a.status = StatusCompleted
 	a.touch(now)
